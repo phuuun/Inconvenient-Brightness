@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inconvenient Brightness</title>
+<style>
+  /* Same monochrome palette as Before / Tsundoku: black at night, ivory paper by day. */
+  :root { --bg:#000; --fg:#fff; --dim:#a1a1aa; --track:#26262a; --err:#ff6b6b; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#fffdf4; --fg:#2a2924; --dim:#6b685c; --track:#ddd9c8; --err:#c0392b; }
+  }
+  html { background:var(--bg); }
+  body { margin:0; min-height:100vh; display:grid; place-content:center; justify-items:center; gap:28px;
+         color:var(--fg); font-family:system-ui,sans-serif; }
+  .eyebrow { font-size:11px; font-weight:600; letter-spacing:1.5px; color:var(--dim); text-transform:uppercase; }
+  #val { font-size:96px; font-weight:700; letter-spacing:-3px; line-height:1; }
+  #bar { position:relative; width:min(560px,85vw); height:4px; background:var(--track); border-radius:2px; }
+  #fill { height:100%; width:0; background:var(--fg); border-radius:2px; }
+  #pill { position:absolute; top:-10px; left:0; width:6px; height:24px; margin-left:-3px; background:var(--fg); border-radius:3px; }
+  #text { width:min(560px,85vw); font-size:22px; line-height:1.6; color:var(--dim); user-select:none; }
+  #text .ok { color:var(--fg); }
+  #text .cur { border-bottom:2px solid var(--fg); }
+  #text .cur.err { border-color:var(--err); color:var(--err); }
+</style>
+</head>
+<body>
+<div class="eyebrow">Inconvenient Brightness</div>
+<div id="val">0</div>
+<div id="bar"><div id="fill"></div><div id="pill"></div></div>
+<div id="text"></div>
+<div class="eyebrow" id="hint">type to turn it up · faster = brighter</div>
+
+<script>
+// Tune these to make it harder/easier.
+const MAX_WPM = 120;  // typing speed that gives 100% brightness
+const MIN_LIGHT = 0.35;  // the page never gets darker than this, so you can still read the text
+
+const PASSAGES = [
+  'the quick brown fox jumps over the lazy dog while nobody asks why the room is so dark',
+  'turning the brightness up used to take one finger and now it takes a keyboard and your dignity',
+  'a wise person once said that the best way to see in the dark is to type faster',
+];
+
+const wpm = (chars, sec) => chars / 5 / (sec / 60);
+console.assert(wpm(300, 60) === 60, 'wpm is broken');
+
+const $ = id => document.getElementById(id);
+let text, pos, startedAt, finished, bright = 0, last = '';
+
+function newRound() {
+  do { text = PASSAGES[Math.floor(Math.random() * PASSAGES.length)]; } while (text === last && PASSAGES.length > 1);
+  last = text; pos = 0; startedAt = null; finished = false; bright = 0;
+  $('text').innerHTML = [...text].map((c, i) => `<span class="${i ? '' : 'cur'}">${c}</span>`).join('');
+  $('hint').textContent = 'type to turn it up · faster = brighter';
+  render();
+}
+
+function render() {
+  $('val').textContent = Math.round(bright);
+  $('fill').style.width = $('pill').style.left = bright + '%';
+  document.documentElement.style.filter = `brightness(${MIN_LIGHT + (1 - MIN_LIGHT) * bright / 100})`;
+}
+
+addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === ' ') e.preventDefault();
+  if (finished) { if (e.key === 'Enter') newRound(); return; }
+  if (e.key.length !== 1) return;
+  const spans = $('text').children;
+  if (e.key !== text[pos]) return spans[pos].classList.add('err');
+  startedAt ??= performance.now();
+  spans[pos].className = 'ok';
+  if (++pos === text.length) {
+    finished = true;
+    bright = Math.min(100, wpm(pos, (performance.now() - startedAt) / 1000) / MAX_WPM * 100);
+    $('hint').textContent = 'that\'s your brightness · enter to try again';
+    return render();
+  }
+  spans[pos].className = 'cur';
+});
+
+(function tick() {
+  if (startedAt && !finished) {  // ≥3s so the first keystrokes don't read as 500 wpm
+    bright = Math.min(100, wpm(pos, Math.max(3, (performance.now() - startedAt) / 1000)) / MAX_WPM * 100);
+    render();
+  }
+  requestAnimationFrame(tick);
+})();
+newRound();
+</script>
+</body>
+</html>
